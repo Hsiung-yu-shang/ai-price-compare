@@ -1,0 +1,5 @@
+from .settings import (
+    BASE_DIR, DEFAULT_HEADERS, REQUEST_TIMEOUT, MAX_RETRIES,
+    SUPPORTED_COUNTRIES, LOGS_DIR, DATA_DIR, DB_URL,
+)
+from .platform_config import PLATFORMS

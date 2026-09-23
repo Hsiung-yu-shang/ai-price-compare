@@ -1,0 +1,25 @@
+[Unit]
+Description=AI Price Compare (FastAPI + Vue + SQLite)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=aiprice
+Group=aiprice
+WorkingDirectory=/opt/ai-price-compare
+EnvironmentFile=-/etc/ai-price-compare.env
+ExecStart=/opt/ai-price-compare/venv/bin/uvicorn api.main:app --host 0.0.0.0 --port ${APP_PORT} --workers 1
+Restart=always
+RestartSec=5
+TimeoutStopSec=20
+
+ProtectSystem=full
+PrivateTmp=true
+ReadWritePaths=/opt/ai-price-compare/data /opt/ai-price-compare/logs
+
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

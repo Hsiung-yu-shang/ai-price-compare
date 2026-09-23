@@ -1,0 +1,9 @@
+# 核心依賴
+requests>=2.31.0
+urllib3>=2.0.0
+sqlalchemy>=2.0.0
+fastapi>=0.100.0
+uvicorn>=0.23.0
+
+# TLS 指紋偽裝 (ChatGPT 爬蟲必要，繞過 Cloudflare Managed Challenge)
+curl_cffi>=0.7.0

@@ -1,0 +1,19 @@
+[Unit]
+Description=Refresh AI subscription pricing
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=aiprice
+Group=aiprice
+WorkingDirectory=/opt/ai-price-compare
+EnvironmentFile=-/etc/ai-price-compare.env
+ExecStart=/opt/ai-price-compare/venv/bin/python scripts/run_all.py --country TW
+
+ProtectSystem=full
+PrivateTmp=true
+ReadWritePaths=/opt/ai-price-compare/data /opt/ai-price-compare/logs
+
+StandardOutput=journal
+StandardError=journal

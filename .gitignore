@@ -1,0 +1,21 @@
+.DS_Store
+__pycache__/
+*.py[cod]
+*.log
+.env
+.env.*
+!.env.example
+!frontend/.env.production
+.venv/
+venv/
+
+frontend/node_modules/
+frontend/dist/
+
+# 正式環境資料應留在 LXC，不提交執行中的 DB/WAL。
+data/*.db-wal
+data/*.db-shm
+data/*.db-journal
+
+.idea/
+.vscode/

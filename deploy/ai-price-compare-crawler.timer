@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily AI pricing refresh
+
+[Timer]
+OnCalendar=*-*-* 04:15:00
+RandomizedDelaySec=30m
+Persistent=true
+Unit=ai-price-compare-crawler.service
+
+[Install]
+WantedBy=timers.target
