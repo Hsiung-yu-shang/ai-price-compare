@@ -231,6 +231,17 @@ class AdminCredentialTests(unittest.TestCase):
             manager.logout(token)
             self.assertFalse(manager.authorized(token))
 
+    def test_first_refresh_is_allowed_soon_after_boot(self):
+        with tempfile.TemporaryDirectory() as directory:
+            manager = AdminManager(
+                hash_password("correct"),
+                Path(directory) / "request",
+                Path(directory) / "status",
+            )
+            with patch("api.admin.time.monotonic", return_value=30.0):
+                self.assertEqual(manager.request_refresh(), (202, 0))
+                self.assertEqual(manager.request_refresh()[0], 429)
+
     def test_admin_origin_restrictions(self):
         self.assertTrue(valid_admin_origin("https://aiprice.example", "aiprice.example"))
         self.assertFalse(valid_admin_origin("http://aiprice.example", "aiprice.example"))

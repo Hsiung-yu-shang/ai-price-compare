@@ -47,7 +47,7 @@ class AdminManager:
         self._verifying = False
         self._failures = deque()
         self._sessions = OrderedDict()
-        self._last_refresh = 0.0
+        self._last_refresh: float | None = None
 
     @property
     def enabled(self) -> bool:
@@ -101,9 +101,10 @@ class AdminManager:
         """Create one marker; the enabled systemd .path unit starts the crawler."""
         now = time.monotonic()
         with self._lock:
-            remaining = REFRESH_COOLDOWN_SECONDS - (now - self._last_refresh)
-            if remaining > 0:
-                return 429, int(remaining) + 1
+            if self._last_refresh is not None:
+                remaining = REFRESH_COOLDOWN_SECONDS - (now - self._last_refresh)
+                if remaining > 0:
+                    return 429, int(remaining) + 1
             try:
                 descriptor = os.open(self.marker, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
             except FileExistsError:
