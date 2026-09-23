@@ -19,10 +19,18 @@
 
 支援 Debian 12+、Ubuntu 24.04+、AlmaLinux 9+ 與 Rocky Linux 9+；LXC 需使用 systemd 並可連線到網際網路。
 
-目前 GitHub 儲存庫是私有的。全新 LXC 必須先設定對此儲存庫具有讀取權限的 Git 認證（例如唯讀 SSH deploy key）；不要把存取權杖寫進指令、URL 或程式碼。認證就緒後執行：
+GitHub 儲存庫已公開，不需要 SSH 金鑰或 GitHub 登入。於全新 LXC 的 root 終端機執行對應的一行指令：
+
+Debian／Ubuntu：
 
 ```bash
-git clone git@github.com:Hsiung-yu-shang/ai-price-compare.git /tmp/ai-price-compare && sudo bash /tmp/ai-price-compare/deploy/install.sh
+apt-get update && apt-get install -y git ca-certificates && git clone https://github.com/Hsiung-yu-shang/ai-price-compare.git /root/ai-price-compare && bash /root/ai-price-compare/deploy/install.sh
+```
+
+AlmaLinux／Rocky Linux：
+
+```bash
+dnf install -y git ca-certificates && git clone https://github.com/Hsiung-yu-shang/ai-price-compare.git /root/ai-price-compare && bash /root/ai-price-compare/deploy/install.sh
 ```
 
 安裝腳本會自動：
