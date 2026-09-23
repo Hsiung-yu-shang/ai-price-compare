@@ -3,7 +3,7 @@ Pydantic Response Schemas
 FastAPI 從這些型別自動產生 Swagger 文件與前端回傳格式驗證
 """
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 from pydantic import BaseModel, Field
 
 
@@ -102,22 +102,6 @@ class CompareOut(BaseModel):
     country_code: str
     currency_note: str = Field(description="幣別說明 (台灣市場 ChatGPT/Gemini 為 TWD，Claude 為 USD)")
     groups: List[CompareGroup]
-
-
-# ── 爬蟲觸發 ──────────────────────────────────────────────
-
-class CrawlerTriggerRequest(BaseModel):
-    platform: Optional[str] = Field(
-        None,
-        examples=["chatgpt"],
-        description="指定平台識別碼 (chatgpt / gemini / claude)，省略表示跑全部",
-    )
-    country: str = Field(default="TW", examples=["TW"], description="目標國家代碼")
-
-
-class CrawlerTriggerOut(BaseModel):
-    status: str = Field(examples=["triggered"], description="always 'triggered'")
-    message: str = Field(description="執行狀態說明")
 
 
 # ── 通用 ──────────────────────────────────────────────────

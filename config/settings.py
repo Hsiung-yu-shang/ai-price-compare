@@ -4,7 +4,7 @@
 __all__ = [
     "BASE_DIR", "DEFAULT_HEADERS", "REQUEST_TIMEOUT", "MAX_RETRIES",
     "SUPPORTED_COUNTRIES", "LOGS_DIR", "DATA_DIR", "DB_URL",
-    "CRAWLER_ADMIN_TOKEN",
+    "ENABLE_API_DOCS",
 ]
 import os
 from pathlib import Path
@@ -42,5 +42,5 @@ DB_URL = os.getenv(
     f"sqlite:///{DATA_DIR / 'pricing.db'}",
 )
 
-# 正式環境由 install.sh 自動產生。未設定時僅適合本機開發。
-CRAWLER_ADMIN_TOKEN = os.getenv("CRAWLER_ADMIN_TOKEN", "")
+# 公開服務預設關閉互動式文件；本機需要時可設 ENABLE_API_DOCS=1。
+ENABLE_API_DOCS = os.getenv("ENABLE_API_DOCS", "0") == "1"

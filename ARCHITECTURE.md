@@ -13,7 +13,6 @@ Client
      FastAPI / Uvicorn (1 worker)
         ├── /             frontend/dist (Vue static build)
         ├── /api/*        REST API
-        ├── /docs         OpenAPI UI
         └── data/pricing.db (SQLite)
 
 systemd timer ── daily ── scripts/run_all.py ── official pricing sources
@@ -48,7 +47,7 @@ SQLAlchemy models:
 
 ### API
 
-`api/main.py` provides platform, plan, comparison, history, crawler-trigger and health endpoints. Comparison tiers retain both `platform_id` and `plan_id`; plan identifiers are not assumed to be globally unique.
+`api/main.py` provides read-only platform, plan, comparison, history and health endpoints. No public route launches crawlers. Comparison tiers retain both `platform_id` and `plan_id`; plan identifiers are not assumed to be globally unique. `api/security.py` bounds request rates, concurrency and response headers; interactive OpenAPI documentation is disabled by default.
 
 ### Frontend
 
@@ -67,7 +66,7 @@ Both views support monthly/annual pricing and price-history dialogs. `npm run bu
 2. synchronizes source into `/opt/ai-price-compare`;
 3. preserves the production database and logs;
 4. creates the virtualenv and builds Vue;
-5. installs the web service and crawler timer;
+5. installs the web service and crawler timer with CPU/memory limits and a read-only application tree;
 6. verifies `/api/health`.
 
 The initial public price snapshot in the repository makes the site usable immediately. A crawler refresh is queued after installation, and the timer keeps it current afterward.

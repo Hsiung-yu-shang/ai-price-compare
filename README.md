@@ -13,7 +13,7 @@
                               systemd 每日執行爬蟲
 ```
 
-不需要 MySQL、Nginx、Docker或常駐的 Node.js 服務。Node.js 只在安裝時負責建置 Vue。
+不需要 MySQL、Nginx、Docker 或常駐的 Node.js 服務。Node.js 只在安裝時負責建置 Vue。
 
 ## 一行部署到全新 LXC
 
@@ -31,14 +31,13 @@ git clone https://github.com/YOUR_ACCOUNT/ai-price-compare.git /tmp/ai-price-com
 2. 將應用同步到 `/opt/ai-price-compare`。
 3. 建立 Python virtualenv 並安裝依賴。
 4. 建置 Vue 前端。
-5. 建立 `aiprice` 系統帳號。
+5. 建立獨立的建置帳號與執行帳號；執行帳號只能寫入資料庫與日誌。
 6. 啟用 FastAPI systemd 服務與每日爬蟲 timer。
 7. 驗證 `/api/health` 後顯示網站網址。
 
 預設入口：
 
 - 網站：`http://LXC_IP:18080`
-- Swagger：`http://LXC_IP:18080/docs`
 - 健康檢查：`http://LXC_IP:18080/api/health`
 
 自訂連接埠：
@@ -71,7 +70,15 @@ sudo journalctl -u ai-price-compare-crawler.service -n 100 --no-pager
 ```
 
 每日爬蟲預設於伺服器時間 04:15 執行，並加入最多 30 分鐘的隨機延遲。
-公開網站不顯示手動同步按鈕；管理 API 由安裝程式產生的權杖保護。伺服器管理者通常直接啟動上面的 systemd service 即可，不必經過公開 API。
+公開網站與 API 都無法啟動爬蟲；管理者透過上面的 systemd 指令手動執行。
+
+## 防濫用設定
+
+應用本身限制每個連線來源每分鐘最多 120 次、全站每分鐘最多 600 次請求，同時處理最多 32 個請求。超過速率回應 `429`，超過並發回應 `503`。這些計數只使用連線來源，不信任客戶端自行傳送的 IP 標頭。若 Tunnel 在同一台主機，應用看到的來源可能都是本機位址，因此每來源額度會由所有訪客共用。systemd 也限制服務的 CPU、記憶體及可寫目錄。這些限制保護 LXC 資源，但大量攻擊流量仍應由入口層處理。
+
+若透過 Cloudflare Tunnel 對外，請在 Cloudflare 的「Security rules → Rate limiting rules」為 `/api/` 設定依訪客 IP 計數的規則，例如每分鐘 60 次後封鎖 10 分鐘。正式網域也應只透過 Tunnel 進入；在防火牆或 LXC 網路設定限制外部直接連到 `18080`。若 Tunnel 與應用在同一台 LXC，可讓 Tunnel 連 `http://127.0.0.1:18080`，再用區域網路規則限制其他來源。Cloudflare 方案可用的條件與處置方式可能不同，請依控制台提供的選項設定。
+
+互動式 API 文件預設關閉。本機需要文件時可用 `ENABLE_API_DOCS=1 python3 -m uvicorn api.main:app --port 8000`；勿在公開服務啟用。
 
 ## 本機開發
 
@@ -125,6 +132,5 @@ data/           初始公開價格快照；正式 DB 會在 LXC 持續更新
 | `GET` | `/api/plans` | 方案列表與篩選 |
 | `GET` | `/api/compare` | 跨平台比價矩陣 |
 | `GET` | `/api/plans/{id}/history` | 價格歷史 |
-| `POST` | `/api/crawler/trigger` | 需 `X-Admin-Token` 的非同步手動觸發 |
 
 定價端點與官方頁面格式可能隨時變動。爬蟲失敗時不會覆寫既有方案，但部分平台具有明確標示的靜態備援價格；正式資料仍應以各平台結帳頁為準。

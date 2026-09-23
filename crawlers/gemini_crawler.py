@@ -7,6 +7,7 @@ Gemini (Google One AI 方案) 定價爬蟲
 """
 import logging
 import re
+from urllib.parse import urljoin, urlsplit
 from typing import Any, Dict, List, Optional
 
 from .base import BasePricingCrawler
@@ -53,22 +54,46 @@ class GeminiPricingCrawler(BasePricingCrawler):
 
         # 找出 /about/assets/d/ 下的 JS bundle
         script_paths = re.findall(r'<script[^>]+src=["\']([^"\']+)["\']', html)
-        candidate_scripts = [
-            s if s.startswith("http") else f"https://one.google.com{s}"
-            for s in script_paths
-            if "/about/assets/d/" in s
-        ]
+        candidate_scripts = []
+        for script_path in script_paths:
+            try:
+                script_url = urljoin("https://one.google.com", script_path)
+                parsed = urlsplit(script_url)
+                allowed_port = parsed.port in (None, 443)
+            except ValueError:
+                continue
+            # 頁面內容不得使爬蟲連向其他主機或任意路徑。
+            if (parsed.scheme == "https" and parsed.hostname == "one.google.com"
+                    and allowed_port
+                    and parsed.path.startswith("/about/assets/d/")):
+                candidate_scripts.append(script_url)
+            if len(candidate_scripts) >= 12:
+                break
 
         logger.info(f"[{self.platform_id}] 掃描 {len(candidate_scripts)} 個 JS 模組尋找 feed 檔名...")
         for script_url in candidate_scripts:
             try:
-                s_resp = self.session.get(script_url, timeout=REQUEST_TIMEOUT)
-                if s_resp.status_code == 200:
-                    match = re.search(r'pricing_\d{4}_\d{2}_\d{2}\.json', s_resp.text)
-                    if match:
-                        filename = match.group(0)
-                        logger.info(f"[{self.platform_id}] 成功找到 Feed 檔名: {filename} (來源: {script_url})")
-                        return filename
+                with self.session.get(
+                    script_url, timeout=REQUEST_TIMEOUT, allow_redirects=False, stream=True
+                ) as s_resp:
+                    if s_resp.status_code != 200:
+                        continue
+                    chunks = []
+                    total_bytes = 0
+                    for chunk in s_resp.iter_content(chunk_size=65536):
+                        total_bytes += len(chunk)
+                        if total_bytes > 5 * 1024 * 1024:
+                            logger.warning(f"[{self.platform_id}] JS 模組過大，已略過: {script_url}")
+                            break
+                        chunks.append(chunk)
+                    else:
+                        match = re.search(
+                            rb'pricing_\d{4}_\d{2}_\d{2}\.json', b"".join(chunks)
+                        )
+                        if match:
+                            filename = match.group(0).decode("ascii")
+                            logger.info(f"[{self.platform_id}] 成功找到 Feed 檔名: {filename} (來源: {script_url})")
+                            return filename
             except Exception as e:
                 logger.debug(f"[{self.platform_id}] 檢查 {script_url} 失敗: {e}")
                 continue

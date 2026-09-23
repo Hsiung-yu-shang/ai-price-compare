@@ -6,8 +6,6 @@ from .schemas import (
     CompareOut,
     CompareGroup,
     ComparePlanItem,
-    CrawlerTriggerRequest,
-    CrawlerTriggerOut,
     ErrorOut,
 )
 
@@ -19,7 +17,5 @@ __all__ = [
     "CompareOut",
     "CompareGroup",
     "ComparePlanItem",
-    "CrawlerTriggerRequest",
-    "CrawlerTriggerOut",
     "ErrorOut",
 ]
