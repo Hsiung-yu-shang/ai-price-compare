@@ -40,8 +40,10 @@ dnf install -y git ca-certificates && git clone https://github.com/Hsiung-yu-sha
 3. 建立 Python virtualenv 並安裝依賴。
 4. 建置 Vue 前端。
 5. 建立獨立的建置帳號與執行帳號；執行帳號只能寫入資料庫與日誌。
-6. 啟用 FastAPI systemd 服務與每日爬蟲 timer。
+6. 啟用 FastAPI systemd 服務、每日爬蟲 timer 與手動同步監看器。
 7. 驗證 `/api/health` 後顯示網站網址。
+
+第一次安裝管理功能時會在終端機**只顯示一次**隨機管理員密碼，請立即存入密碼管理器。伺服器僅保存密碼雜湊於 root 可讀的 `/etc/ai-price-compare-admin.env`，不會放進 GitHub。若已部署舊版，在原始碼目錄執行 `git pull --ff-only && bash deploy/install.sh` 更新；正式資料庫會保留。
 
 預設入口：
 
@@ -78,13 +80,34 @@ sudo journalctl -u ai-price-compare-crawler.service -n 100 --no-pager
 ```
 
 每日爬蟲預設於伺服器時間 04:15 執行，並加入最多 30 分鐘的隨機延遲。
-公開網站與 API 都無法啟動爬蟲；管理者透過上面的 systemd 指令手動執行。
+未登入的公開網站與 API 都無法啟動爬蟲；管理者可透過下方的登入介面或上面的 systemd 指令手動執行。
+
+網站服務與 timer 都會隨 LXC 開機自動啟動；timer 的 `Persistent=true` 會補跑停機期間錯過的排程。可在 LXC 檢查：
+
+```bash
+systemctl is-enabled ai-price-compare.service ai-price-compare-crawler.timer ai-price-compare-crawler.path
+systemctl is-active ai-price-compare.service ai-price-compare-crawler.timer ai-price-compare-crawler.path
+systemctl list-timers ai-price-compare-crawler.timer
+```
+
+## 管理員手動同步
+
+在 **HTTPS** 網站右上角點「管理」圖示，輸入安裝時顯示的密碼，再點「立即同步價格」。登入授權只保留在分頁記憶體，15 分鐘後失效；每 10 分鐘最多手動啟動一次。請求會交由具獨立資源限制的 systemd 爬蟲服務執行，網站每 5 秒顯示進度。公開 API 不接受未授權的同步請求；HTTP 直連 IP 無法登入管理員。
+
+忘記密碼時，於 LXC 的 root 終端機重新產生並立即重啟網站服務：
+
+```bash
+python3 /opt/ai-price-compare/scripts/admin_password.py --rotate
+systemctl restart ai-price-compare.service
+```
+
+手動以命令列同步仍可使用 `systemctl start ai-price-compare-crawler.service`。若同步失敗，查看 `journalctl -u ai-price-compare-crawler.service -n 100 --no-pager`。
 
 ## 防濫用設定
 
 應用本身限制每個連線來源每分鐘最多 120 次、全站每分鐘最多 600 次請求，同時處理最多 32 個請求。超過速率回應 `429`，超過並發回應 `503`。這些計數只使用連線來源，不信任客戶端自行傳送的 IP 標頭。若 Tunnel 在同一台主機，應用看到的來源可能都是本機位址，因此每來源額度會由所有訪客共用。systemd 也限制服務的 CPU、記憶體及可寫目錄。這些限制保護 LXC 資源，但大量攻擊流量仍應由入口層處理。
 
-若透過 Cloudflare Tunnel 對外，請在 Cloudflare 的「Security rules → Rate limiting rules」為 `/api/` 設定依訪客 IP 計數的規則，例如每分鐘 60 次後封鎖 10 分鐘。正式網域也應只透過 Tunnel 進入；在防火牆或 LXC 網路設定限制外部直接連到 `18080`。若 Tunnel 與應用在同一台 LXC，可讓 Tunnel 連 `http://127.0.0.1:18080`，再用區域網路規則限制其他來源。Cloudflare 方案可用的條件與處置方式可能不同，請依控制台提供的選項設定。
+若透過 Cloudflare Tunnel 對外，請在 Cloudflare 的「Security rules → Rate limiting rules」為 `/api/` 設定依訪客 IP 計數的規則，例如每分鐘 60 次後封鎖 10 分鐘；管理登入路徑 `/api/admin/login` 建議另設更嚴格的限制。正式網域也應只透過 Tunnel 進入；在防火牆或 LXC 網路設定限制外部直接連到 `18080`。若 Tunnel 與應用在同一台 LXC，可讓 Tunnel 連 `http://127.0.0.1:18080`，再用區域網路規則限制其他來源。Cloudflare 方案可用的條件與處置方式可能不同，請依控制台提供的選項設定。
 
 互動式 API 文件預設關閉。本機需要文件時可用 `ENABLE_API_DOCS=1 python3 -m uvicorn api.main:app --port 8000`；勿在公開服務啟用。
 

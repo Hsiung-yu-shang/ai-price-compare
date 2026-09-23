@@ -1,4 +1,4 @@
-"""Small, bounded admission guard for the public read-only application.
+"""Small, bounded admission guard for public reads and protected admin writes.
 
 The edge should also rate-limit by visitor IP. This guard protects the LXC if
 the edge rule is absent or traffic reaches the origin directly. It uses the
@@ -9,6 +9,10 @@ import asyncio
 import math
 import time
 from collections import OrderedDict
+
+
+ADMIN_POST_PATHS = frozenset({"/api/admin/login", "/api/admin/refresh", "/api/admin/logout"})
+MAX_ADMIN_BODY = 1024
 
 
 class ResourceGuardMiddleware:
@@ -30,12 +34,13 @@ class ResourceGuardMiddleware:
         self._global_tokens = float(global_per_minute)
         self._global_updated = time.monotonic()
         self._active = 0
+        self._admin_active = 0
 
     @staticmethod
     def _refill(tokens, updated, capacity, now):
         return min(capacity, tokens + (now - updated) * capacity / 60)
 
-    async def _admit(self, peer):
+    async def _admit(self, peer, admin_post=False):
         async with self._lock:
             now = time.monotonic()
             self._global_tokens = self._refill(
@@ -56,10 +61,14 @@ class ResourceGuardMiddleware:
                 return 429, max(1, math.ceil(max(global_wait, peer_wait)))
             if self._active >= self.max_concurrent:
                 return 503, 1
+            if admin_post and self._admin_active >= 2:
+                return 503, 1
 
             self._global_tokens -= 1
             self._clients[peer] = (tokens - 1, now)
             self._active += 1
+            if admin_post:
+                self._admin_active += 1
             return 0, 0
 
     @staticmethod
@@ -78,13 +87,18 @@ class ResourceGuardMiddleware:
         ]
 
     async def _reject(self, send, status, retry_after=0):
-        headers = self._security_headers() + [(b"content-type", b"text/plain; charset=utf-8")]
+        headers = self._security_headers() + [
+            (b"content-type", b"text/plain; charset=utf-8"),
+            (b"cache-control", b"no-store"),
+        ]
         if retry_after:
             headers.append((b"retry-after", str(retry_after).encode("ascii")))
         if status == 405:
             headers.append((b"allow", b"GET, HEAD"))
         body = {
             405: b"Method not allowed",
+            408: b"Request timeout",
+            413: b"Request body too large",
             429: b"Too many requests",
             503: b"Server busy",
         }[status]
@@ -98,7 +112,8 @@ class ResourceGuardMiddleware:
 
         client = scope.get("client")
         peer = client[0] if client else "unknown"
-        status, retry_after = await self._admit(peer)
+        admin_post = scope["method"] == "POST" and scope.get("path", "") in ADMIN_POST_PATHS
+        status, retry_after = await self._admit(peer, admin_post=admin_post)
         if status:
             return await self._reject(send, status, retry_after)
 
@@ -106,16 +121,66 @@ class ResourceGuardMiddleware:
             if message["type"] == "http.response.start":
                 headers = list(message.get("headers", []))
                 headers.extend(self._security_headers())
-                if scope.get("path", "").startswith("/api/") and scope["method"] == "GET":
+                if scope.get("path", "").startswith("/api/admin/"):
+                    headers.append((b"cache-control", b"no-store"))
+                elif scope.get("path", "").startswith("/api/") and scope["method"] == "GET":
                     headers.append((b"cache-control", b"public, max-age=30"))
                 message = {**message, "headers": headers}
             await send(message)
 
         try:
-            if scope["method"] not in {"GET", "HEAD"}:
+            method = scope["method"]
+            path = scope.get("path", "")
+            if method not in {"GET", "HEAD"} and not (method == "POST" and path in ADMIN_POST_PATHS):
                 await self._reject(send, 405)
+            elif method == "POST":
+                headers = dict(scope.get("headers", []))
+                try:
+                    declared_length = int(headers.get(b"content-length", b"0"))
+                except ValueError:
+                    declared_length = MAX_ADMIN_BODY + 1
+                if declared_length > MAX_ADMIN_BODY or declared_length < 0:
+                    await self._reject(send, 413)
+                    return
+
+                received = 0
+                parts = []
+                deadline = asyncio.get_running_loop().time() + 5
+                try:
+                    while True:
+                        remaining = deadline - asyncio.get_running_loop().time()
+                        if remaining <= 0:
+                            raise asyncio.TimeoutError()
+                        message = await asyncio.wait_for(receive(), remaining)
+                        if message["type"] == "http.disconnect":
+                            return
+                        if message["type"] != "http.request":
+                            continue
+                        received += len(message.get("body", b""))
+                        if received > MAX_ADMIN_BODY:
+                            await self._reject(send, 413)
+                            return
+                        parts.append(message.get("body", b""))
+                        if not message.get("more_body", False):
+                            break
+                except asyncio.TimeoutError:
+                    await self._reject(send, 408)
+                    return
+
+                first = True
+
+                async def replay_receive():
+                    nonlocal first
+                    if first:
+                        first = False
+                        return {"type": "http.request", "body": b"".join(parts), "more_body": False}
+                    return await receive()
+
+                await self.app(scope, replay_receive, send_with_headers)
             else:
                 await self.app(scope, receive, send_with_headers)
         finally:
             async with self._lock:
                 self._active -= 1
+                if admin_post:
+                    self._admin_active -= 1

@@ -1,5 +1,5 @@
 <script setup>
-import { Sparkles, LayoutGrid, Columns } from 'lucide-vue-next'
+import { Sparkles, LayoutGrid, Columns, ShieldCheck } from 'lucide-vue-next'
 
 const props = defineProps({
   viewMode: {
@@ -23,7 +23,8 @@ const props = defineProps({
 const emit = defineEmits([
   'update:viewMode',
   'update:country',
-  'update:billingCycle'
+  'update:billingCycle',
+  'openAdmin'
 ])
 </script>
 
@@ -93,6 +94,17 @@ const emit = defineEmits([
               <span class="text-[9px] px-1 py-0.2 bg-emerald-400/20 text-emerald-300 rounded font-bold">優惠</span>
             </button>
           </div>
+
+          <button
+            type="button"
+            class="flex items-center gap-1.5 px-2.5 py-2 text-xs font-semibold text-slate-400 hover:text-slate-100 rounded-lg transition"
+            title="管理員登入與手動同步價格"
+            aria-label="管理員登入與手動同步價格"
+            @click="emit('openAdmin')"
+          >
+            <ShieldCheck class="w-4 h-4" />
+            <span class="hidden lg:inline">管理</span>
+          </button>
 
         </div>
       </div>

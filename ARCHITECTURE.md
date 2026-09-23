@@ -15,7 +15,9 @@ Client
         ├── /api/*        REST API
         └── data/pricing.db (SQLite)
 
-systemd timer ── daily ── scripts/run_all.py ── official pricing sources
+systemd timer ── daily ────────────┐
+admin login + button ── marker ── systemd path ── crawler service
+                                    └───────────── scripts/run_all.py ── official pricing sources
 ```
 
 One Uvicorn worker is intentional: the workload is small and SQLite writes should remain serialized. The frontend calls relative `/api` URLs, so direct IP access and a reverse proxy or Cloudflare Tunnel use the same build.
@@ -47,7 +49,7 @@ SQLAlchemy models:
 
 ### API
 
-`api/main.py` provides read-only platform, plan, comparison, history and health endpoints. No public route launches crawlers. Comparison tiers retain both `platform_id` and `plan_id`; plan identifiers are not assumed to be globally unique. `api/security.py` bounds request rates, concurrency and response headers; interactive OpenAPI documentation is disabled by default.
+`api/main.py` provides read-only platform, plan, comparison, history and health endpoints. Admin login uses a root-owned scrypt password hash, short-lived in-memory bearer tokens, same-origin HTTPS checks and a ten-minute manual-refresh cooldown. An authorized request creates a bounded marker file; the systemd path unit runs the crawler in its separate resource-limited service. No public route launches crawlers. Comparison tiers retain both `platform_id` and `plan_id`; plan identifiers are not assumed to be globally unique. `api/security.py` bounds request rates, concurrency, admin request bodies and response headers; interactive OpenAPI documentation is disabled by default.
 
 ### Frontend
 
@@ -66,7 +68,7 @@ Both views support monthly/annual pricing and price-history dialogs. `npm run bu
 2. synchronizes source into `/opt/ai-price-compare`;
 3. preserves the production database and logs;
 4. creates the virtualenv and builds Vue;
-5. installs the web service and crawler timer with CPU/memory limits and a read-only application tree;
+5. installs the web service, crawler timer and manual-trigger path unit with CPU/memory limits and a read-only application tree;
 6. verifies `/api/health`.
 
 The initial public price snapshot in the repository makes the site usable immediately. A crawler refresh is queued after installation, and the timer keeps it current afterward.

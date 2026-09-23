@@ -5,6 +5,7 @@ import Navbar from './components/Navbar.vue'
 import CompareMatrix from './components/CompareMatrix.vue'
 import PlatformCards from './components/PlatformCards.vue'
 import HistoryModal from './components/HistoryModal.vue'
+import AdminPanel from './components/AdminPanel.vue'
 import { fetchPlatforms, fetchPlans, fetchCompareMatrix } from './api'
 
 const loading = ref(true)
@@ -21,6 +22,7 @@ const compareData = ref({ groups: [] })
 
 const selectedHistoryPlan = ref(null)
 const showHistoryModal = ref(false)
+const showAdminPanel = ref(false)
 
 const loadData = async () => {
   loading.value = true
@@ -59,6 +61,7 @@ onMounted(() => {
       v-model:country="country"
       v-model:billingCycle="billingCycle"
       :usdRate="usdRate"
+      @openAdmin="showAdminPanel = true"
     />
 
     <!-- Main Container -->
@@ -148,6 +151,12 @@ onMounted(() => {
       :plan="selectedHistoryPlan"
       :show="showHistoryModal"
       @close="showHistoryModal = false"
+    />
+
+    <AdminPanel
+      :show="showAdminPanel"
+      @close="showAdminPanel = false"
+      @refreshData="loadData"
     />
 
     <!-- Footer -->

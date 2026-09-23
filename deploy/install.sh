@@ -107,6 +107,14 @@ APP_PORT=$APP_PORT
 ENABLE_API_DOCS=0
 EOF
 chmod 0644 /etc/ai-price-compare.env
+ADMIN_ENV=/etc/ai-price-compare-admin.env
+if [ -L "$ADMIN_ENV" ]; then
+  echo "管理員設定檔不得為符號連結，已停止安裝。"
+  exit 1
+fi
+"$PYTHON_BIN" "$APP_DIR/scripts/admin_password.py" --file "$ADMIN_ENV"
+chown root:root "$ADMIN_ENV"
+chmod 0600 "$ADMIN_ENV"
 # 程式與依賴由 root 持有；服務只能修改資料庫與日誌。
 chown -R root:root "$APP_DIR"
 chown -R "$APP_USER:$APP_USER" "$APP_DIR/data" "$APP_DIR/logs"
@@ -118,11 +126,13 @@ fi
 install -m 0644 "$APP_DIR/deploy/ai-price-compare.service" /etc/systemd/system/ai-price-compare.service
 install -m 0644 "$APP_DIR/deploy/ai-price-compare-crawler.service" /etc/systemd/system/ai-price-compare-crawler.service
 install -m 0644 "$APP_DIR/deploy/ai-price-compare-crawler.timer" /etc/systemd/system/ai-price-compare-crawler.timer
+install -m 0644 "$APP_DIR/deploy/ai-price-compare-crawler.path" /etc/systemd/system/ai-price-compare-crawler.path
 
 systemctl daemon-reload
 systemctl enable ai-price-compare.service
 systemctl restart ai-price-compare.service
 systemctl enable --now ai-price-compare-crawler.timer
+systemctl enable --now ai-price-compare-crawler.path
 
 echo "[7/7] 驗證服務"
 for attempt in $(seq 1 20); do

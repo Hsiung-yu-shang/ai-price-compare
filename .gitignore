@@ -16,6 +16,8 @@ frontend/dist/
 data/*.db-wal
 data/*.db-shm
 data/*.db-journal
+data/manual-refresh.request
+data/crawl_status.json
 
 .idea/
 .vscode/

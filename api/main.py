@@ -5,12 +5,14 @@ FastAPI 主應用
 """
 import sys
 import logging
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import List, Optional
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, Field
 
 # 將專案根目錄加入 sys.path
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -18,8 +20,9 @@ sys.path.insert(0, str(BASE_DIR))
 
 from storage import init_db, get_session, Platform, Plan, PlanFeature, PriceHistory
 from config.platform_config import PLATFORMS, TIER_ORDER
-from config.settings import ENABLE_API_DOCS
+from config.settings import DATA_DIR, ENABLE_API_DOCS
 from api.security import ResourceGuardMiddleware
+from api.admin import AdminManager, valid_admin_origin
 from api.schemas import (
     PlatformOut,
     PlanOut,
@@ -93,6 +96,11 @@ app = FastAPI(
     openapi_url="/openapi.json" if ENABLE_API_DOCS else None,
     responses={500: {"model": ErrorOut}},
 )
+app.state.admin_manager = AdminManager(
+    os.getenv("ADMIN_PASSWORD_HASH", ""),
+    DATA_DIR / "manual-refresh.request",
+    DATA_DIR / "crawl_status.json",
+)
 
 
 @app.get("/api/health", tags=["系統"], summary="健康檢查")
@@ -102,6 +110,62 @@ def health_check():
 
 # 前端和 API 同源，Vite 開發模式透過 proxy 呼叫後端。
 app.add_middleware(ResourceGuardMiddleware)
+
+
+class AdminLoginIn(BaseModel):
+    password: str = Field(min_length=1, max_length=256)
+
+
+def _require_admin(request: Request) -> str:
+    scheme, _, token = request.headers.get("authorization", "").partition(" ")
+    if scheme.lower() != "bearer" or not app.state.admin_manager.authorized(token):
+        raise HTTPException(status_code=401, detail="請先登入管理員")
+    return token
+
+
+def _require_secure_origin(request: Request) -> None:
+    if not valid_admin_origin(request.headers.get("origin"), request.headers.get("host")):
+        raise HTTPException(status_code=403, detail="管理操作只能從同網域 HTTPS 頁面執行")
+
+
+@app.post("/api/admin/login", include_in_schema=False)
+def admin_login(payload: AdminLoginIn, request: Request):
+    _require_secure_origin(request)
+    status, token = app.state.admin_manager.login(payload.password)
+    if status == 503:
+        raise HTTPException(status_code=503, detail="管理功能尚未設定")
+    if status == 429:
+        raise HTTPException(status_code=429, detail="登入嘗試過多，請稍後再試")
+    if status != 200:
+        raise HTTPException(status_code=401, detail="密碼錯誤")
+    return {"token": token, "expires_in": 900}
+
+
+@app.get("/api/admin/status", include_in_schema=False)
+def admin_status(request: Request):
+    _require_admin(request)
+    return app.state.admin_manager.status()
+
+
+@app.post("/api/admin/refresh", status_code=202, include_in_schema=False)
+def admin_refresh(request: Request):
+    _require_secure_origin(request)
+    _require_admin(request)
+    status, retry_after = app.state.admin_manager.request_refresh()
+    if status == 429:
+        raise HTTPException(
+            status_code=429, detail="同步過於頻繁，請稍後再試",
+            headers={"Retry-After": str(retry_after)},
+        )
+    return {"status": "queued"}
+
+
+@app.post("/api/admin/logout", include_in_schema=False)
+def admin_logout(request: Request):
+    _require_secure_origin(request)
+    token = _require_admin(request)
+    app.state.admin_manager.logout(token)
+    return {"status": "ok"}
 
 
 # ══════════════════════════════════════════════════════════

@@ -2,6 +2,8 @@
 Description=Refresh AI subscription pricing
 After=network-online.target
 Wants=network-online.target
+StartLimitIntervalSec=1h
+StartLimitBurst=6
 
 [Service]
 Type=oneshot
@@ -10,7 +12,7 @@ Group=aiprice
 WorkingDirectory=/opt/ai-price-compare
 EnvironmentFile=/etc/ai-price-compare.env
 ExecStart=/opt/ai-price-compare/venv/bin/python scripts/run_all.py --country TW
-RuntimeMaxSec=10min
+TimeoutStartSec=10min
 NoNewPrivileges=true
 CapabilityBoundingSet=
 AmbientCapabilities=
